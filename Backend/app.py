@@ -3,34 +3,56 @@ from flask_cors import CORS
 import os
 from rag_pipeline import ingest_pdf, answer_question
 
-
-
 app = Flask(__name__)
 CORS(app)
 
+UPLOAD_FOLDER = "uploads"
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+
 @app.route("/")
 def home():
-    return "RAG Chatbot backend is running!"
+    return jsonify({"message": "RAG Chatbot backend is running!"})
 
-
-@app.route('/upload', methods=['POST'])
+@app.route("/upload", methods=["POST"])
 def upload():
-    file = request.files['file']
-    if file:
-        save_path = os.path.join("uploads", file.filename)
+    try:
+        # ✅ Correct key name check
+        if 'file' not in request.files:
+            return jsonify({"error": "No PDF file found in request."}), 400
+
+        file = request.files['file']  # ✅ Match this with frontend
+
+        if file.filename == '':
+            return jsonify({"error": "No selected file."}), 400
+
+        if not file.filename.endswith('.pdf'):
+            return jsonify({"error": "Only PDF files are supported."}), 400
+
+        save_path = os.path.join(UPLOAD_FOLDER, file.filename)
         file.save(save_path)
+
         ingest_pdf(save_path)
-        return jsonify({"message": "File uploaded and processed."})
-    return jsonify({"error": "No file uploaded"}), 400
 
-@app.route('/ask', methods=['POST'])
+        return jsonify({"message": "PDF uploaded and processed successfully."})
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/ask", methods=["POST"])
 def ask():
-    data = request.json
-    question = data.get("question")
-    if not question:
-        return jsonify({"error": "No question provided"}), 400
-    answer = answer_question(question)
-    return jsonify({"answer": answer})
+    try:
+        data = request.get_json()
+        question = data.get("question", "").strip()
+        if not question:
+            return jsonify({"error": "No question provided."}), 400
 
-if __name__ == '__main__':
+        answer = answer_question(question)
+        return jsonify({"answer": answer})
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+if __name__ == "__main__":
     app.run(debug=True)
